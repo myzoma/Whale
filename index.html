@@ -3,16 +3,84 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>فلتر العملات</title>
+  <title>فلتر العملات (لحظي من Binance)</title>
   <style>
-    body { font-family: Arial, sans-serif; background-color: #111; color: #fff; padding: 20px; }
-    .card { background: #333; margin: 10px 0; padding: 15px; border-radius: 5px; }
-    .card strong { font-size: 18px; color: #4CAF50; }
+    body {
+      font-family: 'Arial', sans-serif;
+      background-color: #121212;
+      color: #fff;
+      padding: 20px;
+      margin: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      flex-direction: column;
+    }
+
+    h1 {
+      font-size: 2em;
+      margin-bottom: 20px;
+      color: #4CAF50;
+      text-align: center;
+      font-weight: 600;
+    }
+
+    #coins {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 20px;
+      width: 100%;
+      max-width: 1200px;
+      margin-top: 20px;
+    }
+
+    .card {
+      background: #1f1f1f;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      color: #fff;
+    }
+
+    .card:hover {
+      transform: translateY(-10px);
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+    }
+
+    .card strong {
+      font-size: 20px;
+      color: #4CAF50;
+    }
+
+    .card p {
+      font-size: 14px;
+      color: #ccc;
+    }
+
+    .card .highlight {
+      color: #ff9800;
+      font-weight: bold;
+    }
+
+    .loading {
+      text-align: center;
+      font-size: 18px;
+      color: #bbb;
+    }
+
+    .no-results {
+      text-align: center;
+      font-size: 18px;
+      color: #ff5722;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
   <h1>فلتر العملات (Binance)</h1>
-  <div id="coins">جاري التحميل والتحليل...</div>
+  <div id="coins" class="loading">جاري التحميل والتحليل...</div>
 
   <script>
     async function calculateRSI(closes, period = 14) {
@@ -28,18 +96,17 @@
       return rsi;
     }
 
-    // حساب MACD
     function calculateMACD(closes) {
-      const ema12 = calculateEMA(closes, 12); // 12-day EMA
-      const ema26 = calculateEMA(closes, 26); // 26-day EMA
-      const macd = ema12.map((v, i) => v - ema26[i]); // MACD Line
-      const signal = calculateEMA(macd, 9); // Signal Line
+      const ema12 = calculateEMA(closes, 12);
+      const ema26 = calculateEMA(closes, 26);
+      const macd = ema12.map((v, i) => v - ema26[i]);
+      const signal = calculateEMA(macd, 9);
       return { macd, signal };
     }
 
     function calculateEMA(closes, period) {
       const k = 2 / (period + 1);
-      let ema = [closes[0]]; // Starting point is the first closing price
+      let ema = [closes[0]];
       for (let i = 1; i < closes.length; i++) {
         ema.push(closes[i] * k + ema[i - 1] * (1 - k));
       }
@@ -68,19 +135,27 @@
         if (change < 4) continue;
 
         try {
-          const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${coin.symbol}&interval=15m&limit=100`);
+          const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${coin.symbol}&interval=1m&limit=100`);
           const klines = await res.json();
           const closes = klines.map(k => parseFloat(k[4]));
           if (closes.length < 20) continue;
-          const rsi = await calculateRSI(closes.slice(-20));
-          const { macd, signal } = calculateMACD(closes.slice(-20));
+          const rsi = await calculateRSI(closes.slice(-14)); 
+          const { macd, signal } = calculateMACD(closes.slice(-20)); 
           const macdCrossUp = macd[macd.length - 1] > signal[signal.length - 1] && macd[macd.length - 2] < signal[signal.length - 2];
           const sma50 = calculateSMA(closes, 50);
           const sma200 = calculateSMA(closes, 200);
           const momentum = sma50[sma50.length - 1] > sma200[sma200.length - 1];
 
           if (rsi > 50 && macdCrossUp && momentum && parseFloat(coin.volume) > 1000000) {
-            results.push(`<div class="card"><strong>${coin.symbol}</strong> | MACD Cross Up | Volume: ${coin.volume} | Momentum Up | RSI: ${rsi.toFixed(2)} | Change: ${change.toFixed(2)}%</div>`);
+            results.push(`
+              <div class="card">
+                <strong>${coin.symbol}</strong>
+                <p>التغيير: <span class="highlight">${change.toFixed(2)}%</span></p>
+                <p>RSI: <span class="highlight">${rsi.toFixed(2)}</span></p>
+                <p>حجم التداول: <span class="highlight">${coin.volume}</span></p>
+                <p>MACD تقاطع صعودي</p>
+              </div>
+            `);
           }
         } catch (e) {
           console.log("Error in", coin.symbol);
@@ -88,10 +163,11 @@
         }
       }
 
-      container.innerHTML = results.length ? results.join("") : "<p>لا توجد عملات تحقق الشروط حاليًا.</p>";
+      container.innerHTML = results.length ? results.join("") : "<p class='no-results'>لا توجد عملات تحقق الشروط حاليًا.</p>";
     }
 
-    fetchFilteredCoins();
+    // التحديث اللحظي كل 10 ثواني
+    setInterval(fetchFilteredCoins, 10000);
   </script>
 </body>
 </html>
